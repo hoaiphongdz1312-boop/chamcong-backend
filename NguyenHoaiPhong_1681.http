@@ -1,0 +1,240 @@
+@host = http://localhost:5074
+
+# Mã OTP: Otp:DevMode = true nên mã luôn được in ra console dạng "[DEV OTP] <email/sđt>: 123456".
+# Điền mã vào các biến dưới đây trước khi chạy request verify tương ứng.
+@adminOtp = 000000
+@nv1Otp = 000000
+@qlOtp = 000000
+
+### 1. Admin đăng nhập bước 1 (gửi OTP qua Email)
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "Admin@1681",
+  "channel": "Email"
+}
+
+### 2. Admin đăng nhập bước 2 (điền @adminOtp ở trên)
+# @name admin
+POST {{host}}/api/auth/login/verify
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "code": "{{adminOtp}}",
+  "deviceId": "vs-http"
+}
+
+### 3. Thông tin tôi + quyền + homeRoute
+GET {{host}}/api/auth/me
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 4. Danh sách người dùng
+GET {{host}}/api/admin/users?page=1&pageSize=20
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 5. Danh sách ca làm đang hoạt động (lấy id ca để check-in)
+GET {{host}}/api/shifts?activeOnly=true
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 6. Vai trò và quyền
+GET {{host}}/api/admin/roles
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 7. Nhân viên 1 đăng nhập bước 1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "nhanvien1",
+  "password": "Employee@123",
+  "channel": "Email"
+}
+
+### 8. Nhân viên 1 đăng nhập bước 2 (điền @nv1Otp)
+# @name nv1
+POST {{host}}/api/auth/login/verify
+Content-Type: application/json
+
+{
+  "username": "nhanvien1",
+  "code": "{{nv1Otp}}"
+}
+
+### 9. Check-in (shiftId lấy từ bước 5)
+POST {{host}}/api/attendance/check-in
+Authorization: Bearer {{nv1.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "shiftId": 3
+}
+
+### 10. Check-out
+POST {{host}}/api/attendance/check-out
+Authorization: Bearer {{nv1.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "shiftId": 3
+}
+
+### 11. Tạo đơn nghỉ phép
+# @name leave
+POST {{host}}/api/leave-requests
+Authorization: Bearer {{nv1.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "fromDate": "2026-12-01",
+  "toDate": "2026-12-02",
+  "reason": "Việc gia đình"
+}
+
+### 12. Quản lý đăng nhập bước 1
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "quanly",
+  "password": "Manager@123",
+  "channel": "Email"
+}
+
+### 13. Quản lý đăng nhập bước 2 (điền @qlOtp)
+# @name ql
+POST {{host}}/api/auth/login/verify
+Content-Type: application/json
+
+{
+  "username": "quanly",
+  "code": "{{qlOtp}}"
+}
+
+### 14. Quản lý xem đơn chờ duyệt của phòng mình
+GET {{host}}/api/leave-requests?status=Pending
+Authorization: Bearer {{ql.response.body.$.accessToken}}
+
+### 15. Quản lý duyệt đơn
+POST {{host}}/api/leave-requests/{{leave.response.body.$.id}}/approve
+Authorization: Bearer {{ql.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "note": "Đồng ý"
+}
+
+### 16. Nhân viên 1 gọi API quản trị → 403
+GET {{host}}/api/admin/users
+Authorization: Bearer {{nv1.response.body.$.accessToken}}
+
+### 17. Đổi refresh token lấy token mới
+POST {{host}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{nv1.response.body.$.refreshToken}}"
+}
+
+### 18. Đăng ký tài khoản mới (role Employee, chờ duyệt)
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "khachmoi01",
+  "email": "ban@gmail.com",
+  "password": "MatKhau123",
+  "fullName": "Khách Mới",
+  "verifyChannel": "Email"
+}
+
+### 19. Xác thực đăng ký
+POST {{host}}/api/auth/register/verify
+Content-Type: application/json
+
+{
+  "username": "khachmoi01",
+  "code": "000000"
+}
+
+### 20. Quên mật khẩu
+POST {{host}}/api/auth/forgot-password
+Content-Type: application/json
+
+{
+  "emailOrPhone": "ban@gmail.com"
+}
+
+### 21. Kiểm tra SMTP / SMS (chỉ Development)
+GET {{host}}/api/dev/smtp-test?to=ban@gmail.com
+
+### Face 1. Đăng ký khuôn mặt (cần accessToken; đặt 3 ảnh mẫu vào thư mục samples/)
+POST {{host}}/api/face/enroll
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+Content-Type: multipart/form-data; boundary=----face
+
+------face
+Content-Disposition: form-data; name="password"
+
+Admin@1681
+------face
+Content-Disposition: form-data; name="images"; filename="straight.jpg"
+Content-Type: image/jpeg
+
+< ./samples/straight.jpg
+------face
+Content-Disposition: form-data; name="images"; filename="left.jpg"
+Content-Type: image/jpeg
+
+< ./samples/left.jpg
+------face
+Content-Disposition: form-data; name="images"; filename="right.jpg"
+Content-Type: image/jpeg
+
+< ./samples/right.jpg
+------face--
+
+### Face 2. Trạng thái đăng ký
+GET {{host}}/api/face/status
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### Face 3. Xin challenge (ghi lại challengeToken vào biến @faceToken bên dưới)
+# @name faceChallenge
+POST {{host}}/api/face/challenge
+Content-Type: application/json
+
+{ "username": "admin", "deviceId": "vs-http" }
+
+### Face 4. Đăng nhập bằng khuôn mặt (ảnh nhìn thẳng + ảnh quay đầu)
+POST {{host}}/api/auth/login-face
+Content-Type: multipart/form-data; boundary=----face
+
+------face
+Content-Disposition: form-data; name="username"
+
+admin
+------face
+Content-Disposition: form-data; name="challengeToken"
+
+{{faceChallenge.response.body.$.challengeToken}}
+------face
+Content-Disposition: form-data; name="deviceId"
+
+vs-http
+------face
+Content-Disposition: form-data; name="imageStart"; filename="start.jpg"
+Content-Type: image/jpeg
+
+< ./samples/login_straight.jpg
+------face
+Content-Disposition: form-data; name="imageTurn"; filename="turn.jpg"
+Content-Type: image/jpeg
+
+< ./samples/login_turn.jpg
+------face--
+
+### Face 5. Xóa khuôn mặt của tôi
+DELETE {{host}}/api/face
+Authorization: Bearer {{admin.response.body.$.accessToken}}
